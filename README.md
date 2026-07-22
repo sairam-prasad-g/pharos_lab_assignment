@@ -67,7 +67,6 @@ The data processing logic remains identical to a production implementation. In a
 
 ```text
 pharos_lab_assignment
-│
 ├── README.md
 │
 ├── notebooks
