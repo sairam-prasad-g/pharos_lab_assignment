@@ -70,23 +70,23 @@ pharos_lab_assignment
 │
 ├── README.md
 ├── LICENSE
-├── requirements.txt
 ├── .gitignore
 │
 ├── notebooks
-│   ├── 01_Bronze_Ingestion.py
-│   ├── 02_Silver_Transformation.py
-│   ├── 03_Gold_Publish.py
+│   ├── 00_Create_Catalog.dbc
+│   ├── 00_Create_Catalog.ipynb
+│   ├── 01_Bronze_Ingestion.dbc
+│   ├── 01_Bronze_Ingestion.ipynb
+│   ├── 02_Silver_Transformation.dbc
+│   ├── 02_Silver_Transformation.ipynb
+│   ├── 03_Gold_Publish.dbc
+│   ├── 03_Gold_Publish.ipynb
 │   └── utils.py
 │
 ├── docs
-│   ├── Data_Product_Contract.md
-│   ├── Solution_Approach.md
-│   └── Architecture.md
-│
-├── screenshots
-│
-└── sample_output
+    ├── Data_Product_Contract.md
+    ├── Solution_Approach.md
+    └── Architecture.md
 ```
 
 ---
@@ -328,9 +328,6 @@ In an enterprise Azure Databricks environment, this implementation can be enhanc
 # Author
 
 **Sairam Prasad Gurajapu**
-
-* Microsoft Certified: Azure Data Engineer Associate
-* Microsoft Certified: Power BI Data Analyst Associate
 
 GitHub Repository:
 
