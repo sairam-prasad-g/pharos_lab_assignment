@@ -69,8 +69,6 @@ The data processing logic remains identical to a production implementation. In a
 pharos_lab_assignment
 │
 ├── README.md
-├── LICENSE
-├── .gitignore
 │
 ├── notebooks
 │   ├── 00_Create_Catalog.dbc
