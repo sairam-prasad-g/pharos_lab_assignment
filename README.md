@@ -81,7 +81,6 @@ pharos_lab_assignment
 │   ├── 02_Silver_Transformation.ipynb
 │   ├── 03_Gold_Publish.dbc
 │   ├── 03_Gold_Publish.ipynb
-│   └── utils.py
 │
 ├── docs
     ├── Data_Product_Contract.md
