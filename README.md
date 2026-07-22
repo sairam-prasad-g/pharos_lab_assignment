@@ -2,58 +2,75 @@
 
 ## Overview
 
-This repository contains my solution for the **Pharos Analytics Lab Data Engineer Assignment**, demonstrating the implementation of an end-to-end Medallion Architecture (Bronze → Silver → Gold) using **Azure Databricks**, **PySpark**, and **Unity Catalog Volumes**.
+This repository contains my solution for the **Pharos Analytics Lab Data Engineer Assignment**. The solution demonstrates an end-to-end Data Engineering pipeline using the **Medallion Architecture (Bronze → Silver → Gold)** implemented with **Azure Databricks**, **PySpark**, **Delta Lake**, and **Unity Catalog Managed Volumes**.
 
-The solution ingests university chapter data from a public ArcGIS REST API, applies data quality validations, transforms the data into a curated dataset, and publishes a governed Gold data product following modern Data Engineering best practices.
-
----
-
-## Solution Architecture
-
-```
-                 Public ArcGIS REST API
-                          │
-                          ▼
-                 Bronze Ingestion Layer
-          (Raw JSON + Run ID + Metadata)
-                          │
-                          ▼
-             Silver Transformation Layer
-     (Flattening + Data Quality + Cleansing)
-                          │
-            ┌─────────────┴─────────────┐
-            ▼                           ▼
-     Silver Layer               Quarantine Layer
- (Clean + Warning Records)   (Invalid Coordinates)
-            │
-            ▼
-              Gold Data Product (v1)
-     (Clean + Warning Records Only)
-```
+The pipeline ingests university chapter data from a public ArcGIS REST API, applies data quality validations, transforms the raw data into a curated dataset, and publishes a governed Gold data product suitable for downstream analytics and reporting.
 
 ---
 
-## Technology Stack
+# Solution Architecture
 
-* Azure Databricks
+```text
+                    Public ArcGIS REST API
+                              │
+                              ▼
+                    Bronze Ingestion Layer
+           (Raw JSON + Metadata + Run History)
+                              │
+                              ▼
+                 Silver Transformation Layer
+      (Flattening + Data Quality + Standardization)
+                    │                      │
+                    │                      ▼
+                    │              Quarantine Layer
+                    │         (Invalid Coordinate Records)
+                    ▼
+                Gold Publish Layer
+      (Clean + Warning Records Only)
+                              │
+                              ▼
+                Analytics / Reporting / BI
+```
+
+---
+
+# Technology Stack
+
+* Azure Databricks (Free Edition - Serverless Compute)
 * Apache Spark (PySpark)
 * Delta Lake
 * Unity Catalog
-* Unity Catalog Volumes
-* Azure Data Lake Storage (conceptual architecture)
-* GitHub
+* Unity Catalog Managed Volumes
 * Python
+* GitHub
 
 ---
 
-## Repository Structure
+# Environment & Platform Considerations
 
-```
+This solution was developed using **Azure Databricks Free Edition (Serverless Compute)**.
+
+Azure Databricks Free Edition has several platform limitations compared to a standard Azure Databricks workspace. In particular:
+
+* Custom Azure Data Lake Storage Gen2 (ADLS Gen2) authentication using legacy Hadoop configurations (`fs.azure.account.*`) is not supported.
+* Creating and using Unity Catalog External Locations backed by customer-managed ADLS Gen2 storage is not available.
+* SQL Warehouses are not available in the Free Edition.
+* Storage is limited to Unity Catalog Managed Volumes.
+
+Therefore, instead of using customer-managed ADLS Gen2 containers, this implementation stores Bronze, Silver, Gold, and Quarantine datasets in **Unity Catalog Managed Volumes**.
+
+The data processing logic remains identical to a production implementation. In an enterprise Azure Databricks environment, the same notebooks can be migrated to ADLS Gen2-backed External Volumes or direct `abfss://` storage paths with only storage configuration changes.
+
+---
+
+# Repository Structure
+
+```text
 pharos_lab_assignment
 │
 ├── README.md
-├── requirements.txt
 ├── LICENSE
+├── requirements.txt
 ├── .gitignore
 │
 ├── notebooks
@@ -74,28 +91,47 @@ pharos_lab_assignment
 
 ---
 
+# Storage Architecture
+
+The solution uses Unity Catalog Managed Volumes to implement the Medallion Architecture.
+
+```text
+Unity Catalog
+└── assignment
+    └── university
+        ├── bronze
+        │   └── university_chapters
+        ├── silver
+        │   └── university_chapters
+        ├── gold
+        │   └── university_chapters
+        └── quarantine
+            └── university_chapters
+```
+
+---
+
 # Medallion Architecture
 
 ## Bronze Layer
 
-Purpose:
+### Purpose
 
-* Ingest raw data from the source API
-* Preserve original JSON payload
-* Maintain ingestion history
-* Store one folder per pipeline execution using a unique `run_id`
+* Ingest raw data from the public ArcGIS REST API.
+* Preserve the original JSON payload.
+* Maintain ingestion history.
+* Generate a unique Run ID for every pipeline execution.
 
 ### Processing
 
-* Connects to ArcGIS REST API
-* Downloads raw JSON
-* Generates unique Run ID
-* Stores raw JSON records
-* Adds ingestion metadata
+* Reads data from the REST API.
+* Stores raw JSON without transformation.
+* Generates ingestion metadata.
+* Creates a unique Run ID for traceability.
 
 ### Output
 
-```
+```text
 /Volumes/assignment/university/bronze/university_chapters/<run_id>/
 ```
 
@@ -103,90 +139,78 @@ Purpose:
 
 ## Silver Layer
 
-Purpose:
+### Purpose
 
-Transform raw JSON into a clean, structured dataset.
+Transform raw JSON into a clean, validated, analytics-ready dataset.
 
 ### Processing
 
-* Reads latest Bronze ingestion
-* Dynamically flattens nested JSON
-* Renames business columns
-* Converts data types
-* Formats coordinates
-* Removes duplicates
-* Applies data quality rules
-* Creates warning and quarantine datasets
-
-### Data Quality Rules
-
-#### DQ-Q1
-
-Invalid coordinates:
-
-* Longitude outside -180 to 180
-* Latitude outside -90 to 90
-* Null coordinates
-
-Action:
-
-* Move record to Quarantine layer
+* Reads the latest Bronze ingestion.
+* Dynamically flattens nested JSON structures.
+* Converts data types.
+* Standardizes column names.
+* Formats coordinates.
+* Removes duplicate records.
+* Applies Data Quality rules.
+* Creates Warning and Quarantine datasets.
 
 ---
 
-#### DQ-W1
+### Data Quality Rules
 
-Missing or unknown city
+#### DQ-Q1 – Invalid Coordinates
+
+Records are quarantined if:
+
+* Longitude is outside the range **-180 to 180**
+* Latitude is outside the range **-90 to 90**
+* Longitude is NULL
+* Latitude is NULL
 
 Action:
 
-* Publish record
-* Set
+* Move record to the Quarantine layer.
 
-```
-dq_status = WARNING
-```
+---
+
+#### DQ-W1 – Missing or Unknown City
+
+Records with missing or unknown city values are still published.
+
+Action:
+
+* `dq_status = WARNING`
+* `dq_warnings = ["MISSING_OR_UNKNOWN_CITY"]`
 
 ---
 
 ### Outputs
 
-```
-Silver
-```
-
-and
-
-```
-Quarantine
-```
+* Silver Dataset
+* Quarantine Dataset
 
 ---
 
 ## Gold Layer
 
-Purpose
+### Purpose
 
-Publish a governed data product for downstream analytics.
+Publish a governed Data Product for analytics and reporting.
 
 ### Processing
 
-* Reads Silver layer
-
+* Reads the Silver dataset.
 * Publishes only:
 
   * Clean records
   * Warning records
-
-* Excludes quarantined records
-
-* Adds product metadata
-
-* Creates versioned data product
+* Excludes quarantined records.
+* Adds product metadata.
+* Creates a versioned Data Product.
 
 ### Output
 
-```
+```text
 /Volumes/assignment/university/gold/university_chapters/v1
 ```
 
@@ -194,26 +218,67 @@ Publish a governed data product for downstream analytics.
 
 # Data Product
 
-Product Name
+| Property     | Value                          |
+| ------------ | ------------------------------ |
+| Product Name | University Chapters            |
+| Version      | v1                             |
+| Data Source  | ArcGIS REST API                |
+| Refresh Type | On-demand                      |
+| Storage      | Unity Catalog Managed Volume   |
+| Format       | Delta                          |
+| Consumers    | Power BI, Reporting, Analytics |
 
-```
-University Chapters
-```
+---
 
-Version
+# Data Quality Summary
 
-```
-v1
-```
+| Rule  | Description             | Action               |
+| ----- | ----------------------- | -------------------- |
+| DQ-Q1 | Invalid coordinates     | Quarantine           |
+| DQ-W1 | Missing or Unknown City | Publish with WARNING |
 
-Contains
+---
+
+# Assumptions
+
+* The source API is publicly accessible.
+* Bronze layer stores raw ingestion data for every execution.
+* Silver layer processes the latest successful Bronze ingestion.
+* Gold layer publishes only validated records.
+* Coordinates are supplied in WGS84 (EPSG:4326).
+* Unity Catalog Managed Volumes are used due to Azure Databricks Free Edition limitations.
+
+---
+
+# How to Execute
+
+Execute the notebooks in the following order:
+
+1. `01_Bronze_Ingestion`
+2. `02_Silver_Transformation`
+3. `03_Gold_Publish`
+
+---
+
+# Expected Outputs
+
+### Bronze
+
+* Raw JSON
+* One folder per Run ID
+
+### Silver
 
 * Clean records
 * Warning records
 
-Excludes
+### Quarantine
 
-* Quarantined records
+* Invalid coordinate records
+
+### Gold
+
+* Analytics-ready curated Data Product
 
 ---
 
@@ -221,117 +286,42 @@ Excludes
 
 * End-to-End Medallion Architecture
 * Dynamic JSON Flattening
-* Data Quality Framework
+* Data Quality Validation
 * Quarantine Handling
-* Delta Lake Storage
-* Unity Catalog Volumes
+* Delta Lake Storage Format
+* Unity Catalog Managed Volumes
 * Metadata-driven Processing
 * Modular Notebook Design
-* Production-ready Logging
+* Production-style Logging
 * Versioned Gold Data Product
 
 ---
 
-# Data Quality Summary
+# Production Considerations
 
-| Rule  | Description                   | Action               |
-| ----- | ----------------------------- | -------------------- |
-| DQ-Q1 | Invalid longitude or latitude | Quarantine           |
-| DQ-W1 | Missing or Unknown City       | Publish with WARNING |
+In an enterprise Azure Databricks environment, this implementation can be enhanced by:
 
----
-
-# Assumptions
-
-* Source API is publicly accessible.
-* Bronze layer preserves raw data for each execution.
-* Silver layer always processes the latest Bronze ingestion.
-* Gold layer publishes only curated records.
-* Coordinates are provided in WGS84 (EPSG:4326).
-* Unity Catalog Volumes are used for storage.
-
----
-
-# How to Run
-
-## Step 1
-
-Execute
-
-```
-01_Bronze_Ingestion
-```
-
----
-
-## Step 2
-
-Execute
-
-```
-02_Silver_Transformation
-```
-
----
-
-## Step 3
-
-Execute
-
-```
-03_Gold_Publish
-```
-
----
-
-# Expected Outputs
-
-Bronze
-
-* Raw JSON
-* One folder per Run ID
-
-Silver
-
-* Clean records
-* Warning records
-
-Quarantine
-
-* Invalid coordinate records
-
-Gold
-
-* Analytics-ready data product
-
----
-
-# Improvements Beyond Assignment
-
-The implementation includes several enhancements beyond the minimum assignment requirements:
-
-* Dynamic recursive JSON flattening without hardcoded field names
-* Modular notebook design
-* Metadata-driven processing
-* Reusable utility functions
-* Delta Lake implementation
-* Processing metrics and logging
-* Versioned Gold data product
-* Production-ready code structure
-* Comprehensive documentation
+* Using Azure Data Lake Storage Gen2 as the primary storage layer.
+* Configuring Unity Catalog External Volumes.
+* Orchestrating notebooks using Databricks Workflows.
+* Implementing Incremental Processing with Watermarks.
+* Integrating CI/CD pipelines using Azure DevOps or GitHub Actions.
+* Monitoring Data Quality using Soda or Great Expectations.
+* Enabling Unity Catalog Governance and Lineage.
 
 ---
 
 # Future Enhancements
 
-* Incremental ingestion using watermarks
+* Incremental data ingestion
 * Delta Live Tables
-* Unity Catalog Governance
-* Databricks Workflows
-* Automated CI/CD using GitHub Actions
-* Data Quality monitoring with Soda
-* Schema evolution support
-* Automated alerting and monitoring
+* Change Data Capture (CDC)
+* Schema Evolution
+* Automated Monitoring
+* Pipeline Alerting
+* Data Lineage
+* Unit Testing
+* CI/CD Automation
 
 ---
 
@@ -339,11 +329,10 @@ The implementation includes several enhancements beyond the minimum assignment r
 
 **Sairam Prasad Gurajapu**
 
-Microsoft Certified Azure Data Engineer Associate
+* Microsoft Certified: Azure Data Engineer Associate
+* Microsoft Certified: Power BI Data Analyst Associate
 
-Microsoft Certified Power BI Data Analyst Associate
-
-GitHub Repository
+GitHub Repository:
 
 https://github.com/sairam-prasad-g/pharos_lab_assignment
 
@@ -351,4 +340,4 @@ https://github.com/sairam-prasad-g/pharos_lab_assignment
 
 # Acknowledgement
 
-This project was developed as part of the **Pharos Analytics Lab Data Engineer Assignment** to demonstrate practical data engineering skills using Azure Databricks, PySpark, Delta Lake, and Medallion Architecture.
+This project was developed as part of the **Pharos Analytics Lab Data Engineer Assignment** to demonstrate practical Data Engineering skills using Azure Databricks, PySpark, Delta Lake, Unity Catalog, and the Medallion Architecture.
